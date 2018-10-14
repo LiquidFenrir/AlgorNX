@@ -2,39 +2,42 @@ import os, sys
 from json import load
 import pygame
 import grid_info
-import AlgorNX_runner as runner
 
 pygame.init()
-data_folder = "AlgorNX"
-images_folder = os.path.join(data_folder, "images")
-font_folder = os.path.join(data_folder, "font")
-font = pygame.font.Font(os.path.join(font_folder, "font.ttf"), 14)
-fps = 60
 
-images = {filename[:-4]: pygame.image.load(os.path.join(images_folder, filename)) for filename in os.listdir(images_folder) if not filename == "robot.gif"}
+import AlgorNX_runner as runner
+import AlgorNX_editor as editor
+import AlgorNX_images as images
 
 def draw_test_on_surface(surface, test, robot_position, robot_direction):
     for y, line in enumerate(test, 1):
         for x, square_type in enumerate(line, 1):
-            surface.blit(images[grid_info.get_image_from_type(square_type)], (x*grid_info.IMAGE_SIZE, y*grid_info.IMAGE_SIZE))
+            surface.blit(images.images[grid_info.get_image_from_type(square_type)], (x*grid_info.IMAGE_SIZE, y*grid_info.IMAGE_SIZE))
 
-        surface.blit(images["robot_{}".format(robot_direction)], (robot_position["x"]*grid_info.IMAGE_SIZE, robot_position["y"]*grid_info.IMAGE_SIZE))
+        surface.blit(images.images["robot_{}".format(robot_direction)], (robot_position["x"]*grid_info.IMAGE_SIZE, robot_position["y"]*grid_info.IMAGE_SIZE))
 
-def load_level(level_path):
-    with open(level_path) as f:
+def load_level(level_folder):
+    with open(os.path.join(level_folder, "level.json")) as f:
         level_data = load(f)
     return level_data
 
-def load_program(program_path):
-    with open(program_path) as f:
-        program_data = f.read()
-    return program_data
+def load_program(level_folder):
+    try:
+        with open(os.path.join(level_folder, "program.py")) as f:
+            program_data = f.read()
+        return program_data
+    except OSError:
+        return None
+
+def save_program(level_folder, source):
+    with open(os.path.join(level_folder, "program.py"), "w") as f:
+        f.write(source)
 
 class AlgorNX():
     def add_button_text(self, key, value):
-        self.running_buttons_text[key] = (font.render(value, False, self.text_color), font.size(value))
+        self.running_buttons_text[key] = (images.font.render(value, False, self.text_color), images.font.size(value))
 
-    def __init__(self, level_path, program_path):
+    def __init__(self, level_folder):
         self.running = True
         self.screen = pygame.display.set_mode((1280, 720), pygame.HWSURFACE)
         self.screen_surface = pygame.display.get_surface()
@@ -45,9 +48,9 @@ class AlgorNX():
         self.tests_width = 480
         self.control_buttons_surface = self.screen_surface.subsurface((0, 0, self.tests_width, self.control_buttons_height))
 
-        self.level_data = load_level(level_path)
-        self.program_source = load_program(program_path)
-        self.clear_color = (80,80,80)
+        self.level_data = load_level(level_folder)
+        self.program_source = load_program(level_folder)
+
         self.text_color = (0,0,0)
 
         self.test_header_height = 24
@@ -61,15 +64,15 @@ class AlgorNX():
         self.header_rect_inner.fill((221, 237, 248))
         self.header_rect_inner = (self.header_rect_inner, (2, 2))
 
-        self.tests_header_text = [(font.render("Test {}".format(i+1), False, self.text_color), (4,4)) for i in range(len(self.level_data["tests"]))]
-        self.tests_header_arrow_right = (font.render("\u25ba", False, self.text_color), (self.tests_width-26,2))
-        self.tests_header_arrow_down = (font.render("\u25bc", False, self.text_color), (self.tests_width-26,2))
+        self.tests_header_text = [(images.font.render("Test {}".format(i+1), False, self.text_color), (4,4)) for i in range(len(self.level_data["tests"]))]
+        self.tests_header_arrow_right = (images.font.render("\u25ba", False, self.text_color), (self.tests_width-26,2))
+        self.tests_header_arrow_down = (images.font.render("\u25bc", False, self.text_color), (self.tests_width-26,2))
 
-        self.test_coords_text = [(font.render(str(i+1), False, self.text_color), font.size(str(i+1))[0]) for i in range(max(self.level_data["size"]["width"], self.level_data["size"]["height"]))]
+        self.test_coords_text = [(images.font.render(str(i+1), False, self.text_color), images.font.size(str(i+1))[0]) for i in range(max(self.level_data["size"]["width"], self.level_data["size"]["height"]))]
 
         self.tests_surface = pygame.Surface((self.actual_tests_width, self.actual_tests_height))
 
-        self.tests_surface.fill(self.clear_color)
+        self.tests_surface.fill(images.clear_color)
         for x in range(self.level_data["size"]["width"]):
             self.tests_surface.blit(self.test_coords_text[x][0], ((x+1)*grid_info.IMAGE_SIZE + (grid_info.IMAGE_SIZE - self.test_coords_text[x][1])//2, 3))
 
@@ -92,13 +95,27 @@ class AlgorNX():
         self.add_button_text("fast_speed", ">>")
         self.add_button_text("instant_speed", ">>>")
 
+        self.running_buttons_handlers = (
+            self.validate_program_button_action,
+            self.run_program_button_action,
+            lambda: self.select_speed_mode(0),
+            lambda: self.select_speed_mode(1),
+            lambda: self.select_speed_mode(2),
+        )
+
         green_color = (0,255,128)
         self.red_color = (255,60,60)
-        self.success_text = font.render("Test passed sucessfully!", False, green_color)
-        self.validate_success_text = font.render("All tests passed sucessfully!", False, green_color)
-        self.failure_text = font.render("Test failed!", False, self.red_color)
+        self.success_text = images.font.render("Test passed sucessfully!", False, green_color)
+        self.validate_success_text = images.font.render("All tests passed sucessfully!", False, green_color)
+        self.failure_text = images.font.render("Test failed!", False, self.red_color)
+
+        self.editor_surface_width = 1280-self.tests_width
+        self.editor_surface_height = 720-self.control_buttons_height
+        self.editor_surface = self.screen_surface.subsurface((self.tests_width, 0, self.editor_surface_width, self.editor_surface_height))
         self.message_surface = pygame.Surface((1280-self.tests_width, self.control_buttons_height))
-        self.message_surface.fill(self.clear_color)
+        self.message_surface.fill(images.clear_color)
+
+        self.editor = editor.Editor(self.editor_surface, self.program_source, self.level_data["allowed_keywords"])
 
         self.select_test(0)
 
@@ -107,20 +124,17 @@ class AlgorNX():
             self.draw()
             self.events()
 
-            self.clock.tick(fps)
+            self.clock.tick(60)
+
+    def clear_message(self):
+        self.message_surface.fill(images.clear_color)
 
     def set_message_on_surface(self, surface):
-        self.message_surface.fill(self.clear_color)
+        self.clear_message()
         self.message_surface.blit(surface, ((self.message_surface.get_width() - surface.get_width())//2, (self.message_surface.get_height() - surface.get_height())//2))
 
-    def set_message(self, message):
-        self.set_message_on_surface(font.render(message, False, self.red_color))
-
-    def draw_editor(self):
-        pass
-
-    def draw_source(self):
-        pass
+    def set_error_message(self, message):
+        self.set_message_on_surface(images.font.render(message, False, self.red_color))
 
     def draw_source_running(self, lineno):
         pass
@@ -180,10 +194,9 @@ class AlgorNX():
             test_header.blits(surfaces, False)
 
     def draw(self):
-        self.screen.fill(self.clear_color)
+        self.screen.fill(images.clear_color)
 
-        self.draw_editor()
-        self.draw_source()
+        self.editor.draw()
 
         self.draw_control_buttons()
         self.draw_tests_headers()
@@ -198,7 +211,7 @@ class AlgorNX():
                     self.draw_source_running(self.program_runner.line_no)
                 self.program_runner.draw(draw_test_on_surface, self.tests_surface)
             except Exception as e:
-                self.set_message(str(e))
+                self.set_error_message(str(e))
                 self.run_program_button_action()  # Stop the test
 
         if self.test_running and self.program_runner.program_done:
@@ -228,9 +241,9 @@ class AlgorNX():
                 self.test_running = True
                 self.selected_speed = 0
                 self.framecnt = 0
-                self.set_message("")
+                self.clear_message()
             except Exception as e:
-                self.set_message(str(e))
+                self.set_error_message(str(e))
 
     def select_speed_mode(self, speed_mode):
         if self.test_running:
@@ -238,6 +251,8 @@ class AlgorNX():
 
     def events(self):
         events = pygame.event.get()
+        pos = pygame.mouse.get_pos()
+        self.editor.handle_mouse_hover(pos)
         for e in events:
             if e.type == pygame.QUIT:
                 if self.program_runner:
@@ -246,24 +261,18 @@ class AlgorNX():
                 self.running = False
             elif e.type == pygame.MOUSEBUTTONDOWN:
                 if e.button == 1:
-                    pos = pygame.mouse.get_pos()
-
                     if not self.test_running:
                         for i, test_header in enumerate(self.tests_header_rects):
                             if test_header.collidepoint(pos):
                                 self.select_test(i)
+                                break
 
-                    handlers = (
-                        self.validate_program_button_action,
-                        self.run_program_button_action,
-                        lambda: self.select_speed_mode(0),
-                        lambda: self.select_speed_mode(1),
-                        lambda: self.select_speed_mode(2),
-                    )
-
-                    for i, handler in enumerate(handlers):
+                    for i, handler in enumerate(self.running_buttons_handlers):
                         if pygame.Rect(self.running_button_gap*(i+1) + self.running_button_width*i, 4, self.running_button_width, self.running_button_height).collidepoint(pos):
                             handler()
+                            break
+
+                    self.editor.handle_mouse_click(pos)
 
     def select_test(self, id):
         self.selected_test = id
@@ -283,7 +292,7 @@ class AlgorNX():
         draw_test_on_surface(self.tests_surface, self.level_data["tests"][self.selected_test]["shown"], self.level_data["spawn"], "right")
 
 def main():
-    game = AlgorNX(sys.argv[1], sys.argv[2])
+    game = AlgorNX(sys.argv[1])
     game.mainloop()
 
 if __name__ == "__main__":
