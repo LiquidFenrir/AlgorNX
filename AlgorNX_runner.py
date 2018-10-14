@@ -111,7 +111,7 @@ class ActualRunner(bdb.Bdb):
     def user_call(self, frame, argument_list):
         """Called if we might stop in a function."""
         if frame.f_code.co_filename == "<string>":
-            self.set_next()
+            self.set_step()
         else:
             self.set_return(frame)
 
@@ -140,14 +140,13 @@ class ActualRunner(bdb.Bdb):
 
 class ProgramRunner(ActualRunner):
     def get_square_under_robot(self):
-        return self.grid[self.robot_position["y"]][self.robot_position["x"]]
+        return self.grid[self.robot_position["y"]-1][self.robot_position["x"]-1]
 
     def set_square_under_robot(self, new_type):
-        self.grid[self.robot_position["y"]][self.robot_position["x"]] = new_type
+        self.grid[self.robot_position["y"]-1][self.robot_position["x"]-1] = new_type
 
     def robot_go_up(self):
         if self.robot_position["y"] > 1:
-            print("Going up")
             self.robot_position["y"] -= 1
             self.robot_direction = "up"
         else:
@@ -155,7 +154,6 @@ class ProgramRunner(ActualRunner):
 
     def robot_go_down(self):
         if self.robot_position["y"] < self.level_size["height"]:
-            print("Going down")
             self.robot_position["y"] += 1
             self.robot_direction = "down"
         else:
@@ -163,7 +161,6 @@ class ProgramRunner(ActualRunner):
 
     def robot_go_left(self):
         if self.robot_position["x"] > 1:
-            print("Going left")
             self.robot_position["x"] -= 1
             self.robot_direction = "left"
         else:
@@ -171,7 +168,6 @@ class ProgramRunner(ActualRunner):
 
     def robot_go_right(self):
         if self.robot_position["x"] < self.level_size["width"]:
-            print("Going right")
             self.robot_position["x"] += 1
             self.robot_direction = "right"
         else:
@@ -188,10 +184,8 @@ class ProgramRunner(ActualRunner):
 
     def robot_paint(self):
         square = self.get_square_under_robot()
-        print(square)
         if square == grid_info.MARKER:
             self.set_square_under_robot(grid_info.PAINTED)
-            print("painted")
         else:
             raise Exception("Attempt to paint an unmarked square")
 
@@ -262,7 +256,6 @@ class ProgramRunner(ActualRunner):
         self.robot_position = deepcopy(level_data["spawn"])
         self.grid = deepcopy(level_data["tests"][test_id]["shown"])
         self.wanted_result = deepcopy(level_data["tests"][test_id]["wanted"])
-        self.current_line = -1
         self.robot_direction = "right"
         self.robot_holding = ""
         self.source = source
@@ -333,7 +326,6 @@ class ProgramRunner(ActualRunner):
         try:
             self.run(self.source, self.actual_functions)
         except Exception as e:
-            print(e)
             self.exc_info = sys.exc_info()
         finally:
             self.line_end_event.set()
@@ -350,7 +342,6 @@ class ProgramRunner(ActualRunner):
         self.stop_thread = True
         self.run_line_event.set()
         self.run_thread.join()
-
 
 def validate_and_start_program(program_source, level_data, selected_test):
     source = ast.parse(program_source, filename='program.py', mode='exec')

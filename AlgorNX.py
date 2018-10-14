@@ -195,7 +195,7 @@ class AlgorNX():
                 speeds = [1, 20, 60]
                 if self.framecnt % speeds[2-self.selected_speed] == 0:
                     self.program_runner.update()
-                    self.draw_source_running(self.program_runner.current_line)
+                    self.draw_source_running(self.program_runner.line_no)
                 self.program_runner.draw(draw_test_on_surface, self.tests_surface)
             except Exception as e:
                 self.set_message(str(e))
